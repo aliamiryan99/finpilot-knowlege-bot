@@ -16,4 +16,17 @@
     - [x] Connect the api endpoint in `app/api/chat/route.ts`.
     - [x] Add localStorage chat sessions, "+ New Chat" button, title auto-generation, and deletion to `components/chat.tsx`.
     - [x] Perform final manual and browser verification to test correct grounding, out-of-scope query refusal, and sidebar controls.
-
+- [x] UI Collapsibility & Compact Layout
+    - [x] Implement collapsible message panels for both User ("Analyst") and Assistant ("FinPilot") blocks with layout transitions.
+    - [x] Add truncated one-line content preview inside collapsed message headers.
+    - [x] Build collapsible reference Sources panels showing the citation counts.
+- [x] Interactive Source Preview Modal
+    - [x] Build detailed document source chunk preview overlay.
+    - [x] Add click events to source cards, with pointer indices and hover highlight states.
+    - [x] Render preview modal inside React Portal (`createPortal`) targeting `document.body` to solve centering issues on filtered/blurred containing blocks.
+    - [x] Integrate `Escape` key dismiss listeners, backdrop overlay close clicks, and body scroll-locking.
+    - [x] Parse context titles to show path breadcrumbs at the top of the modal.
+- [x] Short-Term Memory & Conversation Context
+    - [x] Pass the last 10 session messages dynamically from `localStorage` in the POST request body.
+    - [x] Build query condensing (rewriting) logic in `lib/graph.ts` to convert follow-ups into standalone queries.
+    - [x] Pass previous turns into the completions request for contextual final responses.
