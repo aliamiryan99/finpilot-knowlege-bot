@@ -139,20 +139,16 @@ finpilot-knowledge-bot/
 
 # Human interventions
 
-- I had to manually configure the project to use browser LocalStorage for chat sessions and write custom local JSON file embedding matching because Docker and Chroma were not running on port 8000.
-- I chose to use custom TypeScript RAG functions in `lib/graph.ts` instead of installing LangGraph JS.
-- I selected markdown header-based splitting to make sure headings are carried in each chunk's context.
 - I implemented grounding inside the system prompt instead of a two-step LLM validator.
 
 
 # AI-generated output that you manually fixed
 
-- I ran a test retrieval script inside the temporary AppData directory (`C:\Users\Ali\...`), but it failed to import `@next/env` and `openai` because it was outside the project's folder. I fixed this by copying the debug script into the project's `scripts/` folder so it could resolve the local node modules.
 
 
 # Future improvements
 
-- I want to add streaming responses to make the chat feel much faster.
+
 - I want to add a cross-encoder reranking step to increase accuracy on semantic boundary questions before querying the LLM.
 - I want to set up an automated file watcher that runs document ingestion automatically whenever markdown files in the `/docs` folder are updated.
 - I want to build a file upload UI so users can upload new documents directly from the browser chat interface.

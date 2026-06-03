@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { FormEvent, useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 import { EXAMPLE_QUESTIONS } from "@/lib/prompts";
 import type { ChatResponse, Source } from "@/lib/types";
@@ -59,6 +60,48 @@ export function Chat() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [collapsedMessages, setCollapsedMessages] = useState<Record<string, boolean>>({});
+  const [collapsedSources, setCollapsedSources] = useState<Record<string, boolean>>({});
+  const [activePreviewSource, setActivePreviewSource] = useState<Source | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  // Listen for Escape key to close preview modal and handle scroll lock
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setActivePreviewSource(null);
+      }
+    }
+
+    if (activePreviewSource) {
+      window.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [activePreviewSource]);
+
+  function toggleMessage(id: string) {
+    setCollapsedMessages((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
+
+  function toggleSources(id: string) {
+    setCollapsedSources((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  }
 
   // Load chat sessions from localStorage on client mount
   useEffect(() => {
@@ -413,74 +456,140 @@ export function Chat() {
 
             <div className="grid gap-4">
               <AnimatePresence initial={false}>
-                {messages.map((message) => (
-                  <motion.article
-                    key={message.id}
-                    initial={{ opacity: 0, y: 14, scale: 0.99 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.28, ease: "easeOut" }}
-                    className={`flex ${
-                      message.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    <div
-                      className={`grid max-w-[860px] gap-3 rounded-3xl border p-4 shadow-sm sm:p-5 ${
-                        message.role === "user"
-                          ? "border-slate-900 bg-slate-950 text-white"
-                          : "border-slate-200 bg-white text-slate-950"
+                {messages.map((message) => {
+                  const isCollapsed = !!collapsedMessages[message.id];
+                  return (
+                    <motion.article
+                      key={message.id}
+                      initial={{ opacity: 0, y: 14, scale: 0.99 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.28, ease: "easeOut" }}
+                      className={`flex ${
+                        message.role === "user" ? "justify-end" : "justify-start"
                       }`}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`h-2.5 w-2.5 rounded-full ${
-                              message.role === "user"
-                                ? "bg-amber-300"
-                                : "bg-emerald-400"
-                            }`}
-                          />
-                          <span
-                            className={`text-xs font-semibold uppercase ${
-                              message.role === "user"
-                                ? "text-slate-300"
-                                : "text-slate-500"
-                            }`}
-                          >
-                            {message.role === "user" ? "Analyst" : "FinPilot"}
-                          </span>
-                        </div>
-                        {message.role === "assistant" ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                            Grounded answer
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <p
-                        className={`whitespace-pre-wrap text-sm leading-7 ${
+                      <div
+                        className={`grid max-w-[860px] rounded-3xl border shadow-sm transition-all duration-200 ${
+                          isCollapsed ? "p-3 sm:p-3.5 gap-0" : "p-4 sm:p-5 gap-3"
+                        } ${
                           message.role === "user"
-                            ? "text-slate-100"
-                            : "text-slate-700"
+                            ? "border-slate-900 bg-slate-950 text-white"
+                            : "border-slate-200 bg-white text-slate-950"
                         }`}
                       >
-                        {message.content}
-                      </p>
+                        <div className="flex items-center justify-between gap-4 w-full">
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                message.role === "user"
+                                  ? "bg-amber-300"
+                                  : "bg-emerald-400"
+                              }`}
+                            />
+                            <span
+                              className={`text-xs font-semibold uppercase shrink-0 ${
+                                message.role === "user"
+                                  ? "text-slate-300"
+                                  : "text-slate-500"
+                              }`}
+                            >
+                              {message.role === "user" ? "Analyst" : "FinPilot"}
+                            </span>
+                            
+                            {/* Truncated preview when collapsed */}
+                            {isCollapsed && (
+                              <span
+                                className={`text-xs truncate ml-2 max-w-[180px] sm:max-w-[380px] md:max-w-[480px] font-normal ${
+                                  message.role === "user"
+                                    ? "text-slate-400"
+                                    : "text-slate-500"
+                                }`}
+                              >
+                                {message.content}
+                              </span>
+                            )}
+                          </div>
 
-                      {message.warnings?.length ? (
-                        <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                          {message.warnings.map((warning) => (
-                            <p key={warning}>{warning}</p>
-                          ))}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {message.role === "assistant" && !isCollapsed ? (
+                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                Grounded answer
+                              </span>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => toggleMessage(message.id)}
+                              title={isCollapsed ? "Expand message" : "Collapse message"}
+                              className={`flex items-center justify-center h-7 w-7 rounded-full border transition cursor-pointer ${
+                                message.role === "user"
+                                  ? "border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white"
+                                  : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                              }`}
+                            >
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className={`transition-transform duration-200 ${
+                                  isCollapsed ? "" : "rotate-180"
+                                }`}
+                              >
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                              </svg>
+                            </button>
+                          </div>
                         </div>
-                      ) : null}
 
-                      {message.role === "assistant" ? (
-                        <SourcePanel sources={message.sources ?? []} />
-                      ) : null}
-                    </div>
-                  </motion.article>
-                ))}
+                        <AnimatePresence initial={false}>
+                          {!isCollapsed && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2, ease: "easeInOut" }}
+                              className="overflow-hidden grid gap-3"
+                            >
+                              <p
+                                className={`whitespace-pre-wrap text-sm leading-7 ${
+                                  message.role === "user"
+                                    ? "text-slate-100"
+                                    : "text-slate-700"
+                                }`}
+                              >
+                                {message.content}
+                              </p>
+
+                              {message.warnings?.length ? (
+                                <div className="grid gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                  {message.warnings.map((warning) => (
+                                    <p key={warning}>{warning}</p>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              {message.role === "assistant" ? (
+                                <SourcePanel
+                                  sources={message.sources ?? []}
+                                  isCollapsed={!!collapsedSources[message.id]}
+                                  onToggle={() => toggleSources(message.id)}
+                                  onSelectSource={setActivePreviewSource}
+                                />
+                              ) : null}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.article>
+                  );
+                })}
               </AnimatePresence>
 
               {isLoading ? (
@@ -545,11 +654,155 @@ export function Chat() {
           </form>
         </footer>
       </div>
+
+      {/* Source Preview Modal */}
+      {mounted && createPortal(
+        <AnimatePresence>
+          {activePreviewSource && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10">
+              {/* Backdrop */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setActivePreviewSource(null)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              
+              {/* Modal Box */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-2xl flex flex-col max-h-[85vh] z-10"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5 sm:px-8">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 text-slate-500">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-slate-900">
+                        {activePreviewSource.source}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">Source Document Preview</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {typeof activePreviewSource.score === "number" && (
+                      <span className="rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                        Match: {activePreviewSource.score.toFixed(2)}
+                      </span>
+                    )}
+                    
+                    <button
+                      type="button"
+                      onClick={() => setActivePreviewSource(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-slate-800 cursor-pointer active:scale-95"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-slate-50/50">
+                  {(() => {
+                    let contextPath = "";
+                    let cleanContent = activePreviewSource.preview;
+
+                    if (activePreviewSource.preview.startsWith("Context: ")) {
+                      const parts = activePreviewSource.preview.split("\n\n");
+                      if (parts.length > 1) {
+                        contextPath = parts[0].replace("Context: ", "");
+                        cleanContent = parts.slice(1).join("\n\n");
+                      }
+                    }
+
+                    return (
+                      <div className="max-w-none">
+                        {contextPath && (
+                          <div className="mb-6 flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm text-xs font-medium text-slate-500">
+                            <span className="uppercase text-[0.65rem] tracking-wider text-slate-400 font-semibold shrink-0">
+                              Context Location:
+                            </span>
+                            <span className="text-slate-800 break-all">{contextPath}</span>
+                          </div>
+                        )}
+                        
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
+                          <p className="whitespace-pre-wrap text-sm leading-8 text-slate-700 font-sans">
+                            {cleanContent}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-end gap-3 border-t border-slate-100 bg-white px-6 py-4 sm:px-8">
+                  <button
+                    type="button"
+                    onClick={() => setActivePreviewSource(null)}
+                    className="rounded-2xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 cursor-pointer active:scale-95"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </section>
   );
 }
 
-function SourcePanel({ sources }: { sources: Source[] }) {
+function SourcePanel({
+  sources,
+  isCollapsed,
+  onToggle,
+  onSelectSource,
+}: {
+  sources: Source[];
+  isCollapsed: boolean;
+  onToggle: () => void;
+  onSelectSource: (source: Source) => void;
+}) {
   if (sources.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-500">
@@ -560,29 +813,86 @@ function SourcePanel({ sources }: { sources: Source[] }) {
 
   return (
     <div className="grid gap-2">
-      <p className="text-xs font-semibold uppercase text-slate-500">Sources</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {sources.map((source) => (
-          <article
-            key={`${source.source}-${source.preview}`}
-            className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase text-slate-500 hover:text-slate-800 transition cursor-pointer w-fit"
+      >
+        <span>Sources ({sources.length})</span>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className={`transition-transform duration-200 ${
+            isCollapsed ? "" : "rotate-180"
+          }`}
+        >
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+
+      <AnimatePresence initial={false}>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeInOut" }}
+            className="overflow-hidden"
           >
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900">
-                {source.source}
-              </h3>
-              {typeof source.score === "number" ? (
-                <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
-                  {source.score.toFixed(2)}
-                </span>
-              ) : null}
+            <div className="grid gap-2 sm:grid-cols-2 pt-1">
+              {sources.map((source) => (
+                <article
+                  key={`${source.source}-${source.preview}`}
+                  onClick={() => onSelectSource(source)}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-3 hover:border-emerald-300 hover:bg-emerald-50/20 transition cursor-pointer active:scale-[0.99] group flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="min-w-0 truncate text-sm font-semibold text-slate-900 group-hover:text-emerald-800 transition">
+                        {source.source}
+                      </h3>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {typeof source.score === "number" ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            {source.score.toFixed(2)}
+                          </span>
+                        ) : null}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-slate-400 group-hover:text-emerald-600 transition"
+                        >
+                          <path d="M15 3h6v6"></path>
+                          <path d="M9 21H3v-6"></path>
+                          <path d="M21 3l-7 7"></path>
+                          <path d="M3 21l7-7"></path>
+                        </svg>
+                      </div>
+                    </div>
+                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">
+                      {source.preview}
+                    </p>
+                  </div>
+                </article>
+              ))}
             </div>
-            <p className="mt-2 line-clamp-3 text-xs leading-5 text-slate-600">
-              {source.preview}
-            </p>
-          </article>
-        ))}
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
