@@ -1,3 +1,16 @@
-export function getOpenAIClient() {
-  throw new Error("OpenAI client wiring has not been implemented yet.");
+import OpenAI from "openai";
+
+let openaiInstance: OpenAI | null = null;
+
+export function getOpenAIClient(): OpenAI {
+  if (!openaiInstance) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not defined in environment variables.");
+    }
+    openaiInstance = new OpenAI({
+      apiKey,
+    });
+  }
+  return openaiInstance;
 }

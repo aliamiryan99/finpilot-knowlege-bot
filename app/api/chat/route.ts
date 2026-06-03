@@ -1,16 +1,33 @@
 import type { ChatRequest, ChatResponse } from "@/lib/types";
+import { runKnowledgeGraph } from "@/lib/graph";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as Partial<ChatRequest>;
-  const question = body.question?.trim();
+  try {
+    const body = (await request.json()) as Partial<ChatRequest>;
+    const question = body.question?.trim();
 
-  const response: ChatResponse = {
-    answer: question
-      ? `Scaffold ready. Wire this route to the retrieval graph to answer: "${question}".`
-      : "Scaffold ready. Send a question in the request body to test the route.",
-    sources: [],
-    warnings: ["The chat route is currently a placeholder scaffold."],
-  };
+    if (!question) {
+      return Response.json(
+        {
+          answer: "No question provided.",
+          sources: [],
+          warnings: ["Empty question received."],
+        } as ChatResponse,
+        { status: 400 }
+      );
+    }
 
-  return Response.json(response);
+    const response = await runKnowledgeGraph(question);
+    return Response.json(response);
+  } catch (error: any) {
+    console.error("API error in chat route:", error);
+    return Response.json(
+      {
+        answer: "An error occurred on the server.",
+        sources: [],
+        warnings: [error.message || "Internal Server Error"],
+      } as ChatResponse,
+      { status: 500 }
+    );
+  }
 }
