@@ -5,6 +5,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Partial<ChatRequest>;
     const question = body.question?.trim();
+    const history = body.history || [];
 
     if (!question) {
       return Response.json(
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const response = await runKnowledgeGraph(question);
+    const response = await runKnowledgeGraph(question, history);
     return Response.json(response);
   } catch (error: any) {
     console.error("API error in chat route:", error);

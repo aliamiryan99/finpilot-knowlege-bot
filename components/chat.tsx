@@ -185,13 +185,24 @@ export function Chat() {
     setQuestion("");
     setIsLoading(true);
 
+    const history = messages
+      .filter((m) => m.id !== "welcome")
+      .slice(-10)
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
+
     try {
       const result = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ question: nextQuestion }),
+        body: JSON.stringify({
+          question: nextQuestion,
+          history,
+        }),
       });
 
       const payload = (await result.json()) as ChatResponse;
@@ -564,7 +575,7 @@ export function Chat() {
                                     : "text-slate-700"
                                 }`}
                               >
-                                {message.content}
+                                {renderMarkdown(message.content, message.role === "user")}
                               </p>
 
                               {message.warnings?.length ? (
@@ -764,7 +775,7 @@ export function Chat() {
                         
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm">
                           <p className="whitespace-pre-wrap text-sm leading-8 text-slate-700 font-sans">
-                            {cleanContent}
+                            {renderMarkdown(cleanContent, false)}
                           </p>
                         </div>
                       </div>
@@ -895,4 +906,21 @@ function SourcePanel({
       </AnimatePresence>
     </div>
   );
+}
+
+function renderMarkdown(text: string, isUserMessage: boolean) {
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong
+          key={idx}
+          className={`font-bold ${isUserMessage ? "text-white font-semibold" : "text-slate-950 font-bold"}`}
+        >
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return part;
+  });
 }

@@ -1,8 +1,54 @@
 import { retrieveRelevantChunks } from "./retrieval";
 import { getOpenAIClient } from "./openai";
 
-export async function runKnowledgeGraph(question: string) {
-  const sources = await retrieveRelevantChunks(question);
+async function condenseQuestion(
+  question: string,
+  history: { role: "user" | "assistant"; content: string }[]
+): Promise<string> {
+  if (history.length === 0) {
+    return question;
+  }
+
+  try {
+    const openai = getOpenAIClient();
+    const modelName = process.env.OPENAI_MODEL || "gpt-4o-mini";
+
+    const formattedHistory = history
+      .map((msg) => `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`)
+      .join("\n");
+
+    const systemPrompt = `You are an AI assistant. Given a conversation history and a follow-up question, your task is to rewrite the follow-up question into a standalone, fully self-contained question that captures all necessary context from the history.
+If the follow-up question does not need any context from the history and is already self-contained, return it EXACTLY as is.
+Do not answer the question; only return the rewritten standalone question.
+
+Conversation History:
+${formattedHistory}`;
+
+    const response = await openai.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Follow-up Question: ${question}` },
+      ],
+      temperature: 0.0,
+    });
+
+    return response.choices[0].message.content?.trim() || question;
+  } catch (error) {
+    console.error("Failed to condense question:", error);
+    return question;
+  }
+}
+
+export async function runKnowledgeGraph(
+  question: string,
+  history: { role: "user" | "assistant"; content: string }[] = []
+) {
+  // 1. Condense the question based on the history
+  const condensedQuestion = await condenseQuestion(question, history);
+
+  // 2. Retrieve document chunks using the condensed question
+  const sources = await retrieveRelevantChunks(condensedQuestion);
   
   if (sources.length === 0) {
     return {
@@ -35,12 +81,22 @@ ${contextText}
     const openai = getOpenAIClient();
     const modelName = process.env.OPENAI_MODEL || "gpt-4o-mini";
     
+    // Assemble the messages queue including system context, preceding history, and current question
+    const completionMessages: any[] = [
+      { role: "system", content: systemPrompt }
+    ];
+
+    // Add history messages
+    history.forEach((msg) => {
+      completionMessages.push({ role: msg.role, content: msg.content });
+    });
+
+    // Add current user question
+    completionMessages.push({ role: "user", content: question });
+
     const response = await openai.chat.completions.create({
       model: modelName,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: question },
-      ],
+      messages: completionMessages,
       temperature: 0.0,
     });
 

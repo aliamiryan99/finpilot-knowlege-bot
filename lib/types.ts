@@ -12,6 +12,7 @@ export type ChatResponse = {
 
 export type ChatRequest = {
   question: string;
+  history?: { role: "user" | "assistant"; content: string }[];
 };
 
 export type DocumentChunk = {
